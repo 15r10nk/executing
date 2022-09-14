@@ -680,6 +680,80 @@ class TestFiles(unittest.TestCase):
             except TimeOut:
                 print("Time's up")
 
+    @unittest.skipUnless(
+        os.getenv("EXECUTING_TESTFILES"),
+        "specify a directory with EXECUTING_TESTFILES with test files",
+    )
+    def test_more_files(self):
+
+        import pathlib
+        import hashlib
+        import json
+        import linecache
+
+
+        hashes = set()
+
+
+        hash_file=pathlib.Path(__file__+".hashes")
+        if hash_file.exists():
+            hashes = set(json.loads(hash_file.read_text()))
+        try:
+            for filename in pathlib.Path(os.getenv("EXECUTING_TESTFILES")).rglob(
+                "*.py"
+            ):
+                # clear caches
+                linecache.clearcache()
+                for cache_name in ("__source_cache_with_lines", "__executing_cache"):
+                    if hasattr(Source, cache_name):
+                        delattr(Source, cache_name)
+
+                stem = filename.stem
+
+                if not filename:
+                    continue
+
+                filename = os.path.abspath(filename)
+
+                if filename in hashes:
+                    print("known filename",filename)
+                    continue
+                hashes.add(filename)
+
+                try:
+
+                    with open(filename) as content:
+                        content = content.read()
+                except:
+                    continue
+
+                if "GLOBAL = textwrap.dedent(rf" in content:
+                    continue
+
+                file_hash = hashlib.sha224(content.encode()).hexdigest()
+
+                if file_hash in hashes:
+                    print("known hash", filename)
+                    continue
+
+                hashes.add(file_hash)
+
+                try:
+                    self.check_filename(filename, check_names=False)
+                except TimeOut:
+                    print("Time's up")
+                except Exception as e:
+                    new_filename = (
+                        pathlib.Path(__file__).parent
+                        / "samples"
+                        / (stem + "_" + file_hash + ".py")
+                    )
+                    new_filename.write_text(content)
+
+                    #raise
+        finally:
+
+            hash_file.write_text(json.dumps(sorted(hashes)))
 
     def check_filename(self, filename, check_names):
         source = Source.for_filename(filename)
@@ -860,6 +934,8 @@ class TestFiles(unittest.TestCase):
                         p(ast.dump(node, indent=4))
                     else:
                         p(ast.dump(node))
+
+                    p("deadcode:", getattr(node, "deadcode", "<undefined>"))
 
                     parents = []
                     parent = node
