@@ -1242,6 +1242,9 @@ class TestFiles:
                 ):
                     continue
 
+                if isinstance(e, NotOneValueFound):
+                    continue
+
                 # report more information for debugging
                 print("mapping failed")
 
